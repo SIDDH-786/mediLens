@@ -1,0 +1,470 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medicine Substitute Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        .hover-scale { transition: transform 0.3s ease; }
+        .hover-scale:hover { transform: scale(1.05); }
+        .glass { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        #scanPreview { max-width: 100%; height: auto; display: none; }
+        #loadingIndicator { display: none; }
+        .selected { background-color: #d1fae5; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 min-h-screen font-sans">
+    <div class="container mx-auto p-6">
+        <h1 class="text-4xl font-extrabold text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">MediLens</h1>
+        <style>
+            body {
+              background-image: url('bg.jpg');
+              background-size: cover;
+              background-repeat: no-repeat;
+              background-attachment: fixed;
+              background-position: center;
+              color: white; /* optional: makes text more readable on a dark background */
+            }
+          </style>
+          
+        <!-- Search and Scan Section -->
+        <div class="flex flex-col sm:flex-row gap-4 mb-8 justify-center items-center">
+            <input type="text" id="searchInput" placeholder="Search medicines or conditions (e.g., cold fever)" class="w-full sm:w-96 p-3 rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-400 glass text-gray-800 placeholder-gray-500">
+            <button id="scanButton" class="bg-gradient-to-r from-blue-500 to-purple-500 text-white p-3 rounded-full shadow-lg hover:from-blue-600 hover:to-purple-600 hover-scale">
+                <svg class="w-6 h-6 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                Scan Medicine
+            </button>
+        </div>
+
+        <!-- Pin Code Search Section -->
+        <div class="flex flex-col sm:flex-row gap-4 mb-8 justify-center items-center">
+            <input type="text" id="pinCodeInput" placeholder="Enter your pin code (e.g., 208011)" class="w-full sm:w-96 p-3 rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-400 glass text-gray-800 placeholder-gray-500">
+            <button id="findKendraButton" class="bg-gradient-to-r from-green-500 to-teal-500 text-white p-3 rounded-full shadow-lg hover:from-green-600 hover:to-teal-600 hover-scale">
+                Find Nearby Kendras
+            </button>
+        </div>
+
+        <!-- Scan Preview and Loading Indicator -->
+        <div class="text-center mb-8">
+            <img id="scanPreview" class="mx-auto rounded-lg shadow-lg" alt="Scan Preview">
+            <div id="loadingIndicator" class="text-gray-600 mt-2">
+                <svg class="animate-spin inline-block w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Scanning...
+            </div>
+        </div>
+
+        <!-- Kendra Results Section -->
+        <div id="kendraResults" class="hidden mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Nearby Jan Aushadhi Kendras</h2>
+            <div class="overflow-x-auto rounded-xl shadow-2xl glass">
+                <table class="w-full text-gray-800">
+                    <thead class="bg-gradient-to-r from-green-600 to-teal-600 text-white">
+                        <tr>
+                            <th class="p-4 text-left rounded-tl-xl"> Names</th>
+                            <th class="p-4 text-left">Contact</th>
+                            <th class="p-4 text-left">Pin Code</th>
+                            <th class="p-4 text-left">Address</th>
+                            <th class="p-4 text-left">Kendra Code</th>
+                            <th class="p-4 text-left rounded-tr-xl">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="kendraTable" class="bg-white bg-opacity-80"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Medicine Results Section -->
+        <div id="results" class="hidden">
+            <div class="overflow-x-auto rounded-xl shadow-2xl glass">
+                <table class="w-full text-gray-800">
+                    <thead class="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                        <tr>
+                            <th class="p-4 text-left rounded-tl-xl">Medicine Name</th>
+                            <th class="p-4 text-left">Pack Size</th>
+                            <th class="p-4 text-left">Generic Price</th>
+                            <th class="p-4 text-left">Category</th>
+                            <th class="p-4 text-left">Cause</th>
+                            <th class="p-4 text-left">Branded Substitutes</th>
+                            <th class="p-4 text-left">Branded Price</th>
+                            <th class="p-4 text-left">Price Difference</th>
+                            <th class="p-4 text-left rounded-tr-xl">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="medicineTable" class="bg-white bg-opacity-80"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cart Section -->
+        <div id="cartSection" class="mt-8 hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Your Cart</h2>
+            <div class="glass p-6 rounded-xl shadow-lg">
+                <table class="w-full text-gray-800">
+                    <thead class="bg-gradient-to-r from-green-500 to-teal-500 text-white">
+                        <tr>
+                            <th class="p-4 text-left">Medicine Name</th>
+                            <th class="p-4 text-left">Generic Price</th>
+                            <th class="p-4 text-left">Branded Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cartTable" class="bg-white bg-opacity-80"></tbody>
+                </table>
+                <button id="downloadPdfBtn" class="mt-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white p-2 rounded-full shadow-lg hover:from-purple-600 hover:to-pink-600 hover-scale">Download PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden File Input for Camera -->
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;"/>
+
+    <!-- Footer -->
+    <footer class="text-center mt-10 text-lg" style="font-family: 'Pacifico', cursive; color: #0e0118;">Powered by Logicloards</footer>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+
+        // Top 30 Most Busy Kendras (Assumed based on urban density and pin code variety)
+        const kendras = [
+            { srNo: 1, kendraCode: "PMBJK02453", name: "Sujeet Kumar Mishra", contact: "8887959431", pinCode: "208011", address: "Jan Aushadhi Medical Store 128367 H Block Kidwai Nagar Kanpur Nagar (UP) 208011" },
+            { srNo: 2, kendraCode: "PMBJK02454", name: "Deepak Gautam", contact: "9651805249", pinCode: "208017", address: "Jan Aushadhi Medical Store Plot No 60A Thakur RP Complex Panki Road Kalyanpur Kanpur (UP) 208017" },
+            { srNo: 3, kendraCode: "PMBJK02460", name: "Deepak Kumar Chakroborty", contact: "9305842180", pinCode: "208012", address: "111415 Pranay Bhawan Ashok Nagar PO Ramkrishna Nagar PS Nageera Baid Thana Kanpur Nagar" },
+            { srNo: 4, kendraCode: "PMBJK02462", name: "Ashish Pratap Singh", contact: "9554004488", pinCode: "208021", address: "Bajrang Vihar Naubasta Bamba Road Jarauli Phase 1 Near Palace Dist Kanpur Nagar 208021" },
+            { srNo: 5, kendraCode: "PMBJK03113", name: "Seemendra Pratap Singh", contact: "9628079091", pinCode: "208006", address: "1 Singh Market Panchkhura PO Ghatampur PS Ghatampur Kanpur Nagar Uttar Pradesh" },
+            { srNo: 6, kendraCode: "PMBJK03434", name: "Abhishek Mishra", contact: "9707437990", pinCode: "208002", address: "119A10 Kheora Surya Vihar Tiraha PO Nawabganj PS Nawabganj Kanpur Nagar Pradesh" },
+            { srNo: 7, kendraCode: "PMBJK03973", name: "Rishabh Gupta", contact: "9696353009", pinCode: "208002", address: "GSVM MEDICAL COLLEGE" },
+            { srNo: 8, kendraCode: "PMBJK03974", name: "Himanshu Bachel", contact: "8899973336", pinCode: "208019", address: "JK CANCER INSTITUTE" },
+            { srNo: 9, kendraCode: "PMBJK03975", name: "Ankur Kushwah", contact: "8126082699", pinCode: "208001", address: "U.H.M DISTRICT HOSPITAL" },
+            { srNo: 10, kendraCode: "PMBJK03976", name: "Raghvendra Dwivedi", contact: "9453895159", pinCode: "208001", address: "U.H.M DISTRICT FEMALE HOSPITAL" },
+            { srNo: 11, kendraCode: "PMBJK05290", name: "Ved Prakash Bajpai", contact: "8287033777", pinCode: "208002", address: "15. Mahaveer Nagar, Panki Kanpur Nagar" },
+            { srNo: 12, kendraCode: "PMBJK05872", name: "Deepak Srivastava", contact: "8694962560", pinCode: "208011", address: "126/100A, B Block, Kidwai Nagar Kanpur" },
+            { srNo: 13, kendraCode: "PMBJK06868", name: "Ankit Porwal", contact: "8393005510", pinCode: "208017", address: "Azazi no 313, Sri Bala ji market Mainswat road Singhpur Kachher Kalyanpur" },
+            { srNo: 14, kendraCode: "PMBJK07716", name: "Varun Verma", contact: "8293611366", pinCode: "208014", address: "133/50 Block O, Hameerpur Road, Bara Devi Chasraha, Juhi Kanpur Nagar" },
+            { srNo: 15, kendraCode: "PMBJK07794", name: "Raghvendra Dwivedi", contact: "9453895159", pinCode: "208021", address: "30. Hamirpur Road Naubasta" },
+            { srNo: 16, kendraCode: "PMBJK08039", name: "Sanjeev Tripathi", contact: "8318265559", pinCode: "208021", address: "10.4e- 101/17 Ground Floor, Avas Vikas Scheme no. 2, Hanspuram, Naubasta Gala Mand Kanpur Nagar" },
+            { srNo: 17, kendraCode: "PMBJK08281", name: "Ranwar Singh Chauhan", contact: "9450147480", pinCode: "208011", address: "128/543/24 K, Kidwai Nagar Kanpur Nagar" },
+            { srNo: 18, kendraCode: "PMBJK09031", name: "Gaurav Tripathi", contact: "9199716277", pinCode: "208022", address: "26. HG Vivekanand Vihar, W-2, Juhi Barra Kanpur Nagar" },
+            { srNo: 19, kendraCode: "PMBJK09272", name: "Neha Baht", contact: "9452412190", pinCode: "208012", address: "10. No. 119/439, Ground Floor, Shyam Bhawan Chasraha, Darshan purwa, R.K, Nagar Bhitargaon" },
+            { srNo: 20, kendraCode: "PMBJK09296", name: "Gyanendra Singh", contact: "8052054374", pinCode: "208011", address: "338-A, K-Block, Namak Factory Chasraha, Yashoda Nagar Kanpur" },
+            { srNo: 21, kendraCode: "PMBJK09807", name: "Naksy Awasthi", contact: "9415131169", pinCode: "208011", address: "Ground Floor, H.No. L.I.G. 730, Ganyapur Colony, Yashoda Nagar, Kidwai Nagar Vidhunu" },
+            { srNo: 22, kendraCode: "PMBJK09921", name: "Saumya Gupta", contact: "8840590097", pinCode: "208012", address: "Ground Floor, Near Market Gate, And Shukla Clinic, Pipri Road Chasbeypur" },
+            { srNo: 23, kendraCode: "PMBJK10497", name: "Ravindra Singh", contact: "9997225552", pinCode: "208019", address: "Panki Kanpur Nagar" },
+            { srNo: 24, kendraCode: "PMBJK10754", name: "Shweta Gupta", contact: "7905309709", pinCode: "208022", address: "Ground Floor, H No. 130L-1/85, Bagahi, T P Nagar Kalyanpur" },
+            { srNo: 25, kendraCode: "PMBJK10777", name: "Rahul", contact: "8840573750", pinCode: "208022", address: "House No 230 EWS Quarters, Ground Floor, Single Storey Hemant Vihar Barra 2 Kanpur" },
+            { srNo: 26, kendraCode: "PMBJK10948", name: "Roli Mishra", contact: "7052472844", pinCode: "208022", address: "08 42/14 Ground Floor, Dabauli, Block-42, Udyog Nagar Kanpur Nagar" },
+            { srNo: 27, kendraCode: "PMBJK10969", name: "Sonam Chaturvedi", contact: "8726544445", pinCode: "208011", address: "House No 78 A, Ground Floor, New Azad Nagar, Kidwai Nagar Kanpur Nagar" },
+            { srNo: 28, kendraCode: "PMBJK10990", name: "Neelu Mehrotra", contact: "8392618030", pinCode: "208012", address: "107/80 A-2, Jawahar Nagar, Ashok Nagar Kanpur Nagar" },
+            { srNo: 29, kendraCode: "PMBJK11034", name: "Priyanshi Srivastava", contact: "8004262081", pinCode: "208006", address: "shop no 5 ground floor H N 124/b/326 govind nagar kanpur Kanpur Nagar" },
+            { srNo: 30, kendraCode: "PMBJK11065", name: "Kabya", contact: "6394086079", pinCode: "209206", address: "Arajikhara No 47, Ground Floor, Vill Palupur Ghatampur" }
+        ];
+
+        // 35 Generic Medicines Array
+        const medicines = [
+            { medicineName: "Aceclofenac 100mg Tablets", packSize: "10's", priceINR: 10.0, category: "Analgesic", cause: "Pain, Inflammation", genericSubstitutes: "Zerodol (Cipla), Hifenac (Intas)", brandedPriceINR: "40-50" },
+            { medicineName: "Paracetamol 500mg Tablets", packSize: "10's", priceINR: 5.0, category: "Antipyretic", cause: "Fever, Pain", genericSubstitutes: "Dolo (Micro Labs), Calpol (GSK)", brandedPriceINR: "15-20" },
+            { medicineName: "Amlodipine 5mg Tablets", packSize: "10's", priceINR: 8.0, category: "Antihypertensive", cause: "High Blood Pressure", genericSubstitutes: "Amlong (Micro Labs), Stamlo (Dr. Reddy's)", brandedPriceINR: "25-35" },
+            { medicineName: "Atorvastatin 10mg Tablets", packSize: "10's", priceINR: 12.0, category: "Lipid-Lowering", cause: "High Cholesterol", genericSubstitutes: "Lipitor (Pfizer), Atorva (Zydus)", brandedPriceINR: "50-60" },
+            { medicineName: "Metformin 500mg Tablets", packSize: "10's", priceINR: 7.0, category: "Antidiabetic", cause: "Diabetes", genericSubstitutes: "Glycomet (USV), Metrogyl (JB Chemicals)", brandedPriceINR: "20-30" },
+            { medicineName: "Cetirizine 10mg Tablets", packSize: "10's", priceINR: 4.0, category: "Antihistamine", cause: "Allergies", genericSubstitutes: "Zyrtec (UCB), Cetzine (GSK)", brandedPriceINR: "15-25" },
+            { medicineName: "Omeprazole 20mg Capsules", packSize: "10's", priceINR: 10.0, category: "Proton Pump Inhibitor", cause: "Acidity, GERD", genericSubstitutes: "Omez (Dr. Reddy's), Omecip (Cipla)", brandedPriceINR: "40-50" },
+            { medicineName: "Losartan 50mg Tablets", packSize: "10's", priceINR: 15.0, category: "Antihypertensive", cause: "High Blood Pressure", genericSubstitutes: "Losar (Unichem), Repace (Sun Pharma)", brandedPriceINR: "50-60" },
+            { medicineName: "Diclofenac 50mg Tablets", packSize: "10's", priceINR: 8.0, category: "Analgesic", cause: "Pain, Inflammation", genericSubstitutes: "Voveran (Novartis), Dynapar (Troikaa)", brandedPriceINR: "30-40" },
+            { medicineName: "Ibuprofen 400mg Tablets", packSize: "10's", priceINR: 6.0, category: "Analgesic", cause: "Pain, Fever", genericSubstitutes: "Brufen (Abbott), Ibugesic (Cipla)", brandedPriceINR: "20-30" },
+            { medicineName: "Salbutamol 4mg Tablets", packSize: "10's", priceINR: 5.0, category: "Bronchodilator", cause: "Asthma", genericSubstitutes: "Asthalin (Cipla), Salbair (Lupin)", brandedPriceINR: "15-25" },
+            { medicineName: "Azithromycin 500mg Tablets", packSize: "3's", priceINR: 20.0, category: "Antibiotic", cause: "Bacterial Infections", genericSubstitutes: "Azithral (Alembic), Zithromax (Pfizer)", brandedPriceINR: "60-80" },
+            { medicineName: "Amoxicillin 500mg Capsules", packSize: "10's", priceINR: 25.0, category: "Antibiotic", cause: "Bacterial Infections", genericSubstitutes: "Himox (GSK), Mox (Sun Pharma)", brandedPriceINR: "70-90" },
+            { medicineName: "Cefixime 200mg Tablets", packSize: "10's", priceINR: 30.0, category: "Antibiotic", cause: "Bacterial Infections", genericSubstitutes: "Cefoprox (Cipla), Taxim-O (Alkem)", brandedPriceINR: "100-120" },
+            { medicineName: "Levothyroxine 50mcg Tablets", packSize: "100's", priceINR: 50.0, category: "Thyroid Hormone", cause: "Hypothyroidism", genericSubstitutes: "Thyronorm (Abbott), Eltroxin (GSK)", brandedPriceINR: "120-150" },
+            { medicineName: "Pantoprazole 40mg Tablets", packSize: "10's", priceINR: 12.0, category: "Proton Pump Inhibitor", cause: "Acidity, Ulcers", genericSubstitutes: "Pantocid (Sun Pharma), Pan (Alkem)", brandedPriceINR: "40-50" },
+            { medicineName: "Glibenclamide 5mg Tablets", packSize: "10's", priceINR: 6.0, category: "Antidiabetic", cause: "Diabetes", genericSubstitutes: "Daonil (Sanofi), Glucored (Sun Pharma)", brandedPriceINR: "20-30" },
+            { medicineName: "Aspirin 75mg Tablets", packSize: "14's", priceINR: 4.0, category: "Antiplatelet", cause: "Heart Attack Prevention", genericSubstitutes: "Ecosprin (USV), Disprin (Reckitt)", brandedPriceINR: "10-15" },
+            { medicineName: "Montelukast 10mg Tablets", packSize: "10's", priceINR: 15.0, category: "Antiallergic", cause: "Asthma, Allergies", genericSubstitutes: "Montair (Cipla), Singulair (MSD)", brandedPriceINR: "50-60" },
+            { medicineName: "Telmisartan 40mg Tablets", packSize: "10's", priceINR: 18.0, category: "Antihypertensive", cause: "High Blood Pressure", genericSubstitutes: "Telmikind (Mankind), Telma (Glenmark)", brandedPriceINR: "60-70" },
+            { medicineName: "Hydrochlorothiazide 25mg Tablets", packSize: "10's", priceINR: 8.0, category: "Diuretic", cause: "Hypertension, Edema", genericSubstitutes: "Aquazide (Sun Pharma), Hydride (Micro Labs)", brandedPriceINR: "25-35" },
+            { medicineName: "Clopidogrel 75mg Tablets", packSize: "10's", priceINR: 20.0, category: "Antiplatelet", cause: "Heart Attack Prevention", genericSubstitutes: "Clopilet (Sun Pharma), Plavix (Sanofi)", brandedPriceINR: "70-90" },
+            { medicineName: "Ranitidine 150mg Tablets", packSize: "10's", priceINR: 5.0, category: "H2 Blocker", cause: "Acidity, Ulcers", genericSubstitutes: "Rantac (JB Chemicals), Zinetac (GSK)", brandedPriceINR: "15-20" },
+            { medicineName: "Levocetirizine 5mg Tablets", packSize: "10's", priceINR: 6.0, category: "Antihistamine", cause: "Allergies", genericSubstitutes: "Levocet (Glenmark), Xyzal (UCB)", brandedPriceINR: "20-30" },
+            { medicineName: "Doxycycline 100mg Capsules", packSize: "10's", priceINR: 15.0, category: "Antibiotic", cause: "Bacterial Infections", genericSubstitutes: "Doxicycline (Cipla), Doryx (Pfizer)", brandedPriceINR: "50-60" },
+            { medicineName: "Furosemide 40mg Tablets", packSize: "10's", priceINR: 7.0, category: "Diuretic", cause: "Edema, Hypertension", genericSubstitutes: "Lasix (Sanofi), Frusenex (Genix)", brandedPriceINR: "20-30" },
+            { medicineName: "Bisoprolol 5mg Tablets", packSize: "10's", priceINR: 10.0, category: "Beta Blocker", cause: "Hypertension, Heart Failure", genericSubstitutes: "Concor (Merck), Bisoheart (Mankind)", brandedPriceINR: "40-50" },
+            { medicineName: "Domperidone 10mg Tablets", packSize: "10's", priceINR: 5.0, category: "Antiemetic", cause: "Nausea, Vomiting", genericSubstitutes: "Domstal (Torrent), Motilium (Janssen)", brandedPriceINR: "15-20" },
+            { medicineName: "Tramadol 50mg Capsules", packSize: "10's", priceINR: 12.0, category: "Analgesic", cause: "Moderate Pain", genericSubstitutes: "Tramazac (Zydus), Ultram (Janssen)", brandedPriceINR: "40-50" },
+            { medicineName: "Ciprofloxacin 500mg Tablets", packSize: "10's", priceINR: 20.0, category: "Antibiotic", cause: "Bacterial Infections", genericSubstitutes: "Ciplox (Cipla), Cifran (Sun Pharma)", brandedPriceINR: "60-80" },
+            { medicineName: "Simvastatin 20mg Tablets", packSize: "10's", priceINR: 15.0, category: "Lipid-Lowering", cause: "High Cholesterol", genericSubstitutes: "Simvotin (Sun Pharma), Zocor (Merck)", brandedPriceINR: "50-60" },
+            { medicineName: "Gabapentin 300mg Capsules", packSize: "10's", priceINR: 25.0, category: "Anticonvulsant", cause: "Neuropathic Pain, Seizures", genericSubstitutes: "Gabantin (Sun Pharma), Neurontin (Pfizer)", brandedPriceINR: "80-100" },
+            { medicineName: "Ondansetron 4mg Tablets", packSize: "10's", priceINR: 10.0, category: "Antiemetic", cause: "Nausea, Vomiting", genericSubstitutes: "Emeset (Cipla), Zofran (GSK)", brandedPriceINR: "40-50" },
+            { medicineName: "Fluconazole 150mg Tablets", packSize: "1's", priceINR: 10.0, category: "Antifungal", cause: "Fungal Infections", genericSubstitutes: "Forcan (Cipla), Diflucan (Pfizer)", brandedPriceINR: "30-40" },
+            { medicineName: "Pregabalin 75mg Capsules", packSize: "10's", priceINR: 20.0, category: "Anticonvulsant", cause: "Neuropathic Pain", genericSubstitutes: "Pregaba (Torrent), Lyrica (Pfizer)", brandedPriceINR: "70-90" }
+        ];
+
+        let cart = [];
+        let selectedKendra = null;
+
+        // Calculate Price Difference
+        function calculatePriceDifference(genericPrice, brandedPriceRange) {
+            const [min, max] = brandedPriceRange.split('-').map(Number);
+            const avgBranded = (min + max) / 2;
+            return (avgBranded - genericPrice).toFixed(2);
+        }
+
+        // Show Medicine Results
+        function showResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const tbody = document.getElementById('medicineTable');
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                resultsDiv.classList.remove('hidden');
+                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500 fade-in">No results found</td></tr>';
+                return;
+            }
+
+            data.forEach((med, index) => {
+                const row = document.createElement('tr');
+                row.className = `border-b hover:bg-gray-100 hover-scale fade-in`;
+                row.style.animationDelay = `${index * 0.1}s`;
+
+                const priceDiff = calculatePriceDifference(med.priceINR, med.brandedPriceINR);
+                const diffColor = priceDiff > 0 ? 'text-green-600 font-bold' : 'text-red-600 font-bold';
+
+                row.innerHTML = `
+                    <td class="p-4">${med.medicineName}</td>
+                    <td class="p-4">${med.packSize}</td>
+                    <td class="p-4">₹${med.priceINR.toFixed(2)}</td>
+                    <td class="p-4">${med.category}</td>
+                    <td class="p-4">${med.cause}</td>
+                    <td class="p-4">${med.genericSubstitutes}</td>
+                    <td class="p-4">₹${med.brandedPriceINR}</td>
+                    <td class="p-4 ${diffColor}">₹${priceDiff}</td>
+                    <td class="p-4">
+                        <button class="add-to-cart bg-green-500 text-white p-2 rounded hover:bg-green-600" data-index="${index}">Add to Cart</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            resultsDiv.classList.remove('hidden');
+
+            document.querySelectorAll('.add-to-cart').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const index = e.target.getAttribute('data-index');
+                    addToCart(data[index]);
+                });
+            });
+        }
+
+        // Search Medicine
+        function searchMedicine(searchTerm) {
+            const terms = searchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
+            const filtered = medicines.filter(med => {
+                const allFields = [
+                    med.medicineName.toLowerCase(),
+                    med.packSize.toLowerCase(),
+                    med.priceINR.toString(),
+                    med.category.toLowerCase(),
+                    med.cause.toLowerCase(),
+                    med.genericSubstitutes.toLowerCase(),
+                    med.brandedPriceINR.toLowerCase()
+                ].join(' ');
+                return terms.every(term => allFields.includes(term));
+            });
+            showResults(filtered);
+        }
+
+        // Add to Cart
+        function addToCart(medicine) {
+            if (!cart.some(item => item.medicineName === medicine.medicineName)) {
+                cart.push(medicine);
+                updateCartDisplay();
+            } else {
+                alert("This medicine is already in your cart!");
+            }
+        }
+
+        // Update Cart Display
+        function updateCartDisplay() {
+            const cartSection = document.getElementById('cartSection');
+            const cartTable = document.getElementById('cartTable');
+            cartTable.innerHTML = '';
+
+            if (cart.length === 0) {
+                cartSection.classList.add('hidden');
+                return;
+            }
+
+            cart.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.className = 'border-b';
+                row.innerHTML = `
+                    <td class="p-4">${item.medicineName}</td>
+                    <td class="p-4">₹${item.priceINR.toFixed(2)}</td>
+                    <td class="p-4">₹${item.brandedPriceINR}</td>
+                `;
+                cartTable.appendChild(row);
+            });
+            cartSection.classList.remove('hidden');
+        }
+
+        // Search Kendra by Pin Code
+        function searchKendra(pinCode) {
+            const kendraResultsDiv = document.getElementById('kendraResults');
+            const kendraTbody = document.getElementById('kendraTable');
+            kendraTbody.innerHTML = '';
+
+            if (!/^\d{6}$/.test(pinCode)) {
+                kendraResultsDiv.classList.remove('hidden');
+                kendraTbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500 fade-in">Please enter a valid 6-digit pin code</td></tr>';
+                return;
+            }
+
+            const filteredKendras = kendras.filter(kendra => kendra.pinCode === pinCode);
+
+            if (filteredKendras.length === 0) {
+                kendraResultsDiv.classList.remove('hidden');
+                kendraTbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500 fade-in">No kendras found for this pin code</td></tr>';
+                return;
+            }
+
+            filteredKendras.forEach((kendra, index) => {
+                const row = document.createElement('tr');
+                row.className = `border-b hover:bg-gray-100 hover-scale fade-in`;
+                row.style.animationDelay = `${index * 0.1}s`;
+                row.dataset.kendraIndex = index;
+
+                row.innerHTML = `
+                    <td class="p-4">${kendra.name}</td>
+                    <td class="p-4">${kendra.contact}</td>
+                    <td class="p-4">${kendra.pinCode}</td>
+                    <td class="p-4">${kendra.address}</td>
+                    <td class="p-4">${kendra.kendraCode}</td>
+                    <td class="p-4">
+                        <button class="select-kendra bg-blue-500 text-white p-2 rounded hover:bg-blue-600" data-kendra-index="${index}">Select Location</button>
+                    </td>
+                `;
+                kendraTbody.appendChild(row);
+            });
+            kendraResultsDiv.classList.remove('hidden');
+
+            document.querySelectorAll('.select-kendra').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.getAttribute('data-kendra-index'));
+                    selectedKendra = filteredKendras[index];
+                    document.querySelectorAll('#kendraTable tr').forEach(row => row.classList.remove('selected'));
+                    e.target.closest('tr').classList.add('selected');
+                    alert(`Selected Kendra: ${selectedKendra.name}`);
+                });
+            });
+        }
+
+        // Generate PDF with Cart and Selected Kendra
+        document.getElementById('downloadPdfBtn').addEventListener('click', () => {
+            if (cart.length === 0 && !selectedKendra) {
+                alert("Your cart is empty and no Kendra is selected!");
+                return;
+            }
+
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.text("MedSaver Purchase Details", 10, 10);
+            doc.setFontSize(12);
+            let y = 20;
+
+            if (cart.length > 0) {
+                doc.text("Your Medicine Cart:", 10, y);
+                y += 10;
+                cart.forEach((item, index) => {
+                    doc.text(`${index + 1}. ${item.medicineName}`, 10, y);
+                    doc.text(`Generic Price: ₹${item.priceINR.toFixed(2)}`, 10, y + 5);
+                    doc.text(`Branded Price: ₹${item.brandedPriceINR}`, 10, y + 10);
+                    y += 20;
+                });
+            } else {
+                doc.text("Your Medicine Cart: (Empty)", 10, y);
+                y += 10;
+            }
+
+            if (selectedKendra) {
+                doc.text("Selected Kendra Details:", 10, y);
+                y += 10;
+                doc.text(`Name: ${selectedKendra.name}`, 10, y);
+                y += 5;
+                doc.text(`Contact: ${selectedKendra.contact}`, 10, y);
+                y += 5;
+                doc.text(`Pin Code: ${selectedKendra.pinCode}`, 10, y);
+                y += 5;
+                doc.text(`Address: ${selectedKendra.address}`, 10, y);
+                y += 5;
+                doc.text(`Kendra Code: ${selectedKendra.kendraCode}`, 10, y);
+            } else {
+                doc.text("Selected Kendra: (None)", 10, y);
+            }
+
+            doc.save("medsaver_purchase_details.pdf");
+        });
+
+        // Search Input Listener
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            if (e.target.value.trim() === '') {
+                document.getElementById('results').classList.add('hidden');
+            } else {
+                searchMedicine(e.target.value);
+            }
+        });
+
+        // Pin Code Input Listener
+        document.getElementById('findKendraButton').addEventListener('click', () => {
+            const pinCode = document.getElementById('pinCodeInput').value.trim();
+            if (pinCode) {
+                searchKendra(pinCode);
+            } else {
+                alert("Please enter a pin code.");
+            }
+        });
+
+        // Enhanced Scan Functionality
+        const cameraInput = document.getElementById('cameraInput');
+        const scanButton = document.getElementById('scanButton');
+        const scanPreview = document.getElementById('scanPreview');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        scanButton.addEventListener('click', () => {
+            cameraInput.click();
+        });
+
+        cameraInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const imageURL = URL.createObjectURL(file);
+            scanPreview.src = imageURL;
+            scanPreview.style.display = 'block';
+            loadingIndicator.style.display = 'flex';
+
+            try {
+                const { data: { text } } = await Tesseract.recognize(imageURL, 'eng', {
+                    logger: m => console.log(m)
+                });
+                const cleanText = text.replace(/\s+/g, ' ').trim();
+                document.getElementById('searchInput').value = cleanText;
+                searchMedicine(cleanText);
+            } catch (error) {
+                console.error("OCR failed:", error);
+                alert("Failed to recognize text. Please try again with a clearer image.");
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
